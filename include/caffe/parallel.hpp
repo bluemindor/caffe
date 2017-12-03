@@ -82,6 +82,9 @@ class NCCL : public GPUParams<Dtype>,
   boost::barrier* barrier();
   void set_barrier(boost::barrier* value);
 
+ inline const shared_ptr<Solver<Dtype> >& solver() const {
+    return solver_;
+  }
   /**
    * In single process settings, create instances without uids and
    * call this to connect them.

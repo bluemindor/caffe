@@ -231,6 +231,94 @@ Dtype Blob<Dtype>::asum_data() const {
   return 0;
 }
 
+// CAFFE summary: calculate histgram for the data
+template <typename Dtype>
+bool Blob<Dtype>::hist_data(int bin_range, int scale) {
+  if (!data_) { return false; }
+  switch (data_->head()) {
+    case SyncedMemory::HEAD_AT_CPU:
+    case SyncedMemory::HEAD_AT_GPU:
+    case SyncedMemory::SYNCED:
+    {
+      size_t hist_bytes = (3 + 2 * bin_range) * sizeof(int);
+      if (!hist_data_ || hist_data_->size() < hist_bytes)
+        hist_data_.reset(new SyncedMemory(hist_bytes));
+
+  #ifndef CPU_ONLY
+      int * hist_ptr = (int *) hist_data_->mutable_gpu_data();
+      caffe_gpu_memset(hist_bytes, 0, hist_ptr);
+      caffe_gpu_hist(gpu_data(), hist_ptr, capacity_, bin_range, scale);
+  #else
+      int * hist_ptr = (int *) hist_data_->mutable_cpu_data();
+      caffe_memset(hist_bytes, 0, hist_ptr);
+      caffe_cpu_hist(cpu_data(), hist_ptr, capacity_, bin_range, scale);
+  #endif
+      return true;
+    }
+    case SyncedMemory::UNINITIALIZED:
+      return false;
+    default:
+      LOG(FATAL) << "Unknown SyncedMemory head state: " << data_->head();
+  }
+  return false;
+}
+
+template <>
+bool Blob<int>::hist_data(int bin_range, int scale) {
+  NOT_IMPLEMENTED;
+  return false;
+}
+
+template <>
+bool Blob<unsigned int>::hist_data(int bin_range, int scale) {
+  NOT_IMPLEMENTED;
+  return false;
+}
+
+// CAFFE summary: calculate histgram for the diff
+template <typename Dtype>
+bool Blob<Dtype>::hist_diff(int bin_range, int scale) {
+  if (!data_) { return false; }
+  switch (data_->head()) {
+    case SyncedMemory::HEAD_AT_CPU:
+    case SyncedMemory::HEAD_AT_GPU:
+    case SyncedMemory::SYNCED:
+    {
+      size_t hist_bytes = (3 + 2 * bin_range) * sizeof(int);
+      if (!hist_diff_ || hist_diff_->size() < hist_bytes)
+        hist_diff_.reset(new SyncedMemory(hist_bytes));
+
+  #ifndef CPU_ONLY
+      int * hist_ptr = (int *) hist_diff_->mutable_gpu_data();
+      caffe_gpu_memset(hist_bytes, 0, hist_ptr);
+      caffe_gpu_hist(gpu_diff(), hist_ptr, capacity_, bin_range, scale);
+  #else
+      int * hist_ptr = (int *) hist_diff_->mutable_cpu_data();
+      caffe_memset(hist_bytes, 0, hist_ptr);
+      caffe_cpu_hist(cpu_diff(), hist_ptr, capacity_, bin_range, scale);
+  #endif
+      return true;
+    }
+    case SyncedMemory::UNINITIALIZED:
+      return false;
+    default:
+      LOG(FATAL) << "Unknown SyncedMemory head state: " << data_->head();
+  }
+  return false;
+}
+
+template <>
+bool Blob<int>::hist_diff(int bin_range, int scale) {
+  NOT_IMPLEMENTED;
+  return false;
+}
+
+template <>
+bool Blob<unsigned int>::hist_diff(int bin_range, int scale) {
+  NOT_IMPLEMENTED;
+  return false;
+}
+
 template <> unsigned int Blob<unsigned int>::asum_diff() const {
   NOT_IMPLEMENTED;
   return 0;

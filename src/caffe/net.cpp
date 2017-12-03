@@ -17,6 +17,10 @@
 #include "caffe/util/math_functions.hpp"
 #include "caffe/util/upgrade_proto.hpp"
 
+#include "caffe/test/test_caffe_main.hpp"
+#include <glog/stl_logging.h>
+#include <boost/lexical_cast.hpp>
+
 namespace caffe {
 
 template <typename Dtype>
@@ -67,10 +71,6 @@ void Net<Dtype>::Init(const NetParameter& in_param) {
   top_id_vecs_.resize(param.layer_size());
   bottom_need_backward_.resize(param.layer_size());
   for (int layer_id = 0; layer_id < param.layer_size(); ++layer_id) {
-    // For non-root solvers, whether this layer is shared from root_net_.
-    bool share_from_root = !Caffe::root_solver()
-        && root_net_ != NULL
-        && root_net_->layers_[layer_id]->ShareInParallel();
     // Inherit phase from net if unset.
     if (!param.layer(layer_id).has_phase()) {
       param.mutable_layer(layer_id)->set_phase(phase_);
@@ -257,6 +257,27 @@ void Net<Dtype>::Init(const NetParameter& in_param) {
   ShareWeights();
   debug_info_ = param.debug_info();
   LOG_IF(INFO, Caffe::root_solver()) << "Network initialization done.";
+
+  // pick up histgram calculation parameters
+  weight_bin_range_ = param.weight_bin_range();
+  CHECK( weight_bin_range_ > 0 );
+  weight_scale_ = param.weight_scale();
+  CHECK( weight_scale_ > 0 );
+
+  gradient_bin_range_ = param.gradient_bin_range();
+  CHECK( gradient_bin_range_ > 0 );
+  gradient_scale_ = param.gradient_scale();
+  CHECK( gradient_scale_ > 0 );
+
+  activation_bin_range_ = param.activation_bin_range();
+  CHECK( activation_bin_range_ > 0 );
+  activation_scale_ = param.activation_scale();
+  CHECK( activation_scale_ > 0 );
+
+  // pick CAFFE summary flag from environment, and
+  // enforce debug if required.
+  summary_info_ = getenv("ENABLE_CAFFE_SUMMARY") != NULL;
+  LOG_IF(INFO, Caffe::root_solver()) << "Caffe summary was " << (summary_info_ ? "enabled" : "disabled");
 }
 
 template <typename Dtype>
@@ -588,32 +609,96 @@ void Net<Dtype>::BackwardFromTo(int start, int end) {
 
 template <typename Dtype>
 void Net<Dtype>::ForwardDebugInfo(const int layer_id) {
+  // prepare CAFFE summary header
+  string phase_str = (phase_ == TRAIN) ? "train" : "test";
+  string iter_str = boost::lexical_cast<std::string>(iter_);
+
+  // NOTE: 3 for [-inf, bin_range_], 0, [bin_range_, inf]
+  vector<int> h(3 + 2 * activation_bin_range_);
   for (int top_id = 0; top_id < top_vecs_[layer_id].size(); ++top_id) {
-    const Blob<Dtype>& blob = *top_vecs_[layer_id][top_id];
+    Blob<Dtype>& blob = *top_vecs_[layer_id][top_id];
     const string& blob_name = blob_names_[top_id_vecs_[layer_id][top_id]];
     const Dtype data_abs_val_mean = blob.asum_data() / blob.count();
-    LOG_IF(INFO, Caffe::root_solver())
-        << "    [Forward] "
-        << "Layer " << layer_names_[layer_id]
-        << ", top blob " << blob_name
-        << " data: " << data_abs_val_mean;
+
+    // log normal if CAFFE summary is NOT requested, or
+    // append extra summary information to the log, which includes:
+    // - phase
+    // - iteration
+    // - histgram if supported
+    if (!summary_info_) {
+      LOG_IF(INFO, Caffe::root_solver())
+          << "    [Forward] "
+          << "Layer " << layer_names_[layer_id]
+          << ", top blob " << blob_name
+          << " data: " << data_abs_val_mean;
+
+    } else {
+      bool supported = blob.hist_data(activation_bin_range_, activation_scale_);
+      if (supported) {
+        const int *h_ptr = (const int *) blob.hist_data_->cpu_data();
+        h.assign(h_ptr, h_ptr + h.size());
+        LOG_IF(INFO, Caffe::root_solver())
+            << "    [Forward] " << phase_str
+            << ", iter: " << iter_str
+            << ", Layer " << layer_names_[layer_id]
+            << ", top blob " << blob_name
+            << ", data: " << data_abs_val_mean
+            << ", hist: " << h;
+      } else {
+        LOG_IF(INFO, Caffe::root_solver())
+            << "    [Forward] " << phase_str
+            << ", iter: " << iter_str
+            << ", Layer " << layer_names_[layer_id]
+            << ", top blob " << blob_name
+            << ", data: " << data_abs_val_mean;
+      }
+    }
   }
+
+  h.resize(3 + 2 * weight_bin_range_);
   for (int param_id = 0; param_id < layers_[layer_id]->blobs().size();
        ++param_id) {
-    const Blob<Dtype>& blob = *layers_[layer_id]->blobs()[param_id];
+    Blob<Dtype>& blob = *layers_[layer_id]->blobs()[param_id];
     const int net_param_id = param_id_vecs_[layer_id][param_id];
     const string& blob_name = param_display_names_[net_param_id];
     const Dtype data_abs_val_mean = blob.asum_data() / blob.count();
-    LOG_IF(INFO, Caffe::root_solver())
-        << "    [Forward] "
-        << "Layer " << layer_names_[layer_id]
-        << ", param blob " << blob_name
-        << " data: " << data_abs_val_mean;
+
+    if (!summary_info_) {
+        LOG_IF(INFO, Caffe::root_solver())
+            << "    [Forward] "
+            << "Layer " << layer_names_[layer_id]
+            << ", param blob " << blob_name
+            << " data: " << data_abs_val_mean;
+
+    } else {
+      bool supported = blob.hist_data(weight_bin_range_, weight_scale_);
+      if (supported) {
+        const int *h_ptr = (const int *) blob.hist_data_->cpu_data();
+        h.assign(h_ptr, h_ptr + h.size());
+        LOG_IF(INFO, Caffe::root_solver())
+            << "    [Forward] " << phase_str
+            << ", iter: " << iter_str
+            << ", Layer " << layer_names_[layer_id]
+            << ", param blob " << blob_name
+            << ", data: " << data_abs_val_mean
+            << ", hist: " << h;
+      } else {
+        LOG_IF(INFO, Caffe::root_solver())
+            << "    [Forward] " << phase_str
+            << ", iter: " << iter_str
+            << ", Layer " << layer_names_[layer_id]
+            << ", param blob " << blob_name
+            << ", data: " << data_abs_val_mean;
+      }
+    }
   }
 }
 
 template <typename Dtype>
 void Net<Dtype>::BackwardDebugInfo(const int layer_id) {
+  // prepare CAFFE summary header
+  string iter_str = boost::lexical_cast<std::string>(iter_);
+
   const vector<Blob<Dtype>*>& bottom_vec = bottom_vecs_[layer_id];
   for (int bottom_id = 0; bottom_id < bottom_vec.size(); ++bottom_id) {
     if (!bottom_need_backward_[layer_id][bottom_id]) { continue; }
@@ -626,16 +711,42 @@ void Net<Dtype>::BackwardDebugInfo(const int layer_id) {
         << ", bottom blob " << blob_name
         << " diff: " << diff_abs_val_mean;
   }
+
+  vector<int> h(3 + 2 * gradient_bin_range_);
   for (int param_id = 0; param_id < layers_[layer_id]->blobs().size();
        ++param_id) {
     if (!layers_[layer_id]->param_propagate_down(param_id)) { continue; }
-    const Blob<Dtype>& blob = *layers_[layer_id]->blobs()[param_id];
+    Blob<Dtype>& blob = *layers_[layer_id]->blobs()[param_id];
     const Dtype diff_abs_val_mean = blob.asum_diff() / blob.count();
-    LOG_IF(INFO, Caffe::root_solver())
-        << "    [Backward] "
-        << "Layer " << layer_names_[layer_id]
-        << ", param blob " << param_id
-        << " diff: " << diff_abs_val_mean;
+
+    if (!summary_info_) {
+      LOG_IF(INFO, Caffe::root_solver())
+          << "    [Backward] "
+          << "Layer " << layer_names_[layer_id]
+          << ", param blob " << param_id
+          << " diff: " << diff_abs_val_mean;
+
+    } else {
+      bool supported = blob.hist_diff(gradient_bin_range_, gradient_scale_);
+      if (supported) {
+        const int *h_ptr = (const int *) blob.hist_diff_->cpu_data();
+        h.assign(h_ptr, h_ptr + h.size());
+        LOG_IF(INFO, Caffe::root_solver())
+            << "    [Backward] "
+            << "iter: " << iter_str
+            << ", Layer " << layer_names_[layer_id]
+            << ", param blob " << param_id
+            << ", diff: " << diff_abs_val_mean
+            << ", hist: " << h;
+      } else {
+        LOG_IF(INFO, Caffe::root_solver())
+            << "    [Backward] "
+            << "iter: " << iter_str
+            << ", Layer " << layer_names_[layer_id]
+            << ", param blob " << param_id
+            << ", diff: " << diff_abs_val_mean;
+      }
+    }
   }
 }
 

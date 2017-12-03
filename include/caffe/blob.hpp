@@ -240,6 +240,24 @@ class Blob {
   /// @brief Compute the sum of squares (L2 norm squared) of the diff.
   Dtype sumsq_diff() const;
 
+  /**
+   * @brief Compute the histgram of the data for CAFFE summary
+   *
+   * don't use const, need to reset hist size
+   * set 16 bins for histogram
+   */
+  bool hist_data(int bin_range, int scale);
+  shared_ptr<SyncedMemory> hist_data_;
+
+  /**
+   * @brief Compute the histgram of the diff for CAFFE summary
+   *
+   * don't use const, need to reset hist size
+   * set 16 bins for histogram
+   */
+  bool hist_diff(int bin_range, int scale);
+  shared_ptr<SyncedMemory> hist_diff_;
+
   /// @brief Scale the blob data by a constant factor.
   void scale_data(Dtype scale_factor);
   /// @brief Scale the blob diff by a constant factor.

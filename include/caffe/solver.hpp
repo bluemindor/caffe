@@ -72,11 +72,12 @@ class Solver {
   inline const vector<shared_ptr<Net<Dtype> > >& test_nets() {
     return test_nets_;
   }
-  int iter() const { return iter_; }
+  int iter() { return iter_; }
+  void IncreIter() { iter_++; }
 
   // Invoked at specific points during an iteration
   class Callback {
-   protected:
+    public:
     virtual void on_start() = 0;
     virtual void on_gradients_ready() = 0;
 
@@ -107,9 +108,9 @@ class Solver {
    */
   virtual inline const char* type() const { return ""; }
 
- protected:
   // Make and apply the update value for the current iteration.
   virtual void ApplyUpdate() = 0;
+ protected:
   string SnapshotFilename(const string extension);
   string SnapshotToBinaryProto();
   string SnapshotToHDF5();

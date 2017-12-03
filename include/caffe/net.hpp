@@ -221,6 +221,11 @@ class Net {
   const shared_ptr<Layer<Dtype> > layer_by_name(const string& layer_name) const;
 
   void set_debug_info(const bool value) { debug_info_ = value; }
+  // debug state and working iteration
+  void set_debug_info_iter(const bool value, const int iter) {
+    debug_info_ = value;
+    iter_ = iter;
+  }
 
   // Helpers for Init.
   /**
@@ -345,6 +350,24 @@ class Net {
   vector<Callback*> after_backward_;
 
 DISABLE_COPY_AND_ASSIGN(Net);
+
+  // extra CAFFE summary besides debug info which includes:
+  // - weight, gradient, activation histgrams
+  int weight_bin_range_;
+  int weight_scale_;
+  int gradient_bin_range_;
+  int gradient_scale_;
+  int activation_bin_range_;
+  int activation_scale_;
+
+  int loss_layer_id_;
+  int test_input_layer_id_;
+
+  // iteration number for those collected debug info
+  int iter_;
+
+  // flag to turn on/off the extra CAFFE summary
+  bool summary_info_;
 };
 
 

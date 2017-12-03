@@ -51,8 +51,8 @@ void Solver<Dtype>::Init(const SolverParameter& param) {
   }
   // Scaffolding code
   InitTrainNet();
+  InitTestNets();
   if (Caffe::root_solver()) {
-    InitTestNets();
     LOG(INFO) << "Solver scaffolding done.";
   }
   iter_ = 0;
@@ -102,7 +102,6 @@ void Solver<Dtype>::InitTrainNet() {
 
 template <typename Dtype>
 void Solver<Dtype>::InitTestNets() {
-  CHECK(Caffe::root_solver());
   const bool has_net_param = param_.has_net_param();
   const bool has_net_file = param_.has_net();
   const int num_generic_nets = has_net_param + has_net_file;
@@ -173,7 +172,7 @@ void Solver<Dtype>::InitTestNets() {
     LOG(INFO)
         << "Creating test net (#" << i << ") specified by " << sources[i];
     test_nets_[i].reset(new Net<Dtype>(net_params[i]));
-    test_nets_[i]->set_debug_info(param_.debug_info());
+    test_nets_[i]->set_debug_info_iter(param_.debug_info(), iter_);
   }
 }
 
@@ -203,8 +202,9 @@ void Solver<Dtype>::Step(int iters) {
     for (int i = 0; i < callbacks_.size(); ++i) {
       callbacks_[i]->on_start();
     }
+    const bool summary_info_ = getenv("ENABLE_CAFFE_SUMMARY") != NULL;
     const bool display = param_.display() && iter_ % param_.display() == 0;
-    net_->set_debug_info(display && param_.debug_info());
+    net_->set_debug_info_iter(display && (param_.debug_info() || summary_info_), iter_);
     // accumulate the loss and gradient
     Dtype loss = 0;
     for (int i = 0; i < param_.iter_size(); ++i) {
@@ -339,7 +339,16 @@ void Solver<Dtype>::Test(const int test_net_id) {
   vector<int> test_score_output_id;
   const shared_ptr<Net<Dtype> >& test_net = test_nets_[test_net_id];
   Dtype loss = 0;
-  for (int i = 0; i < param_.test_iter(test_net_id); ++i) {
+
+  // CAFFE summary
+  int test_iter = param_.test_iter(test_net_id);
+  const bool summary_info_ = getenv("ENABLE_CAFFE_SUMMARY") != NULL;
+  bool debug_info_saved = param_.debug_info();
+  test_nets_[test_net_id]->set_debug_info_iter(false, iter_);
+
+  for (int i = 0; i < test_iter; ++i) {
+    if (i+1 == test_iter) test_nets_[test_net_id]->set_debug_info_iter(summary_info_, iter_);
+
     SolverAction::Enum request = GetRequestedAction();
     // Check to see if stoppage of testing/training has been requested.
     while (request != SolverAction::NONE) {
@@ -379,6 +388,9 @@ void Solver<Dtype>::Test(const int test_net_id) {
       }
     }
   }
+
+  test_nets_[test_net_id]->set_debug_info_iter(debug_info_saved, iter_);
+
   if (requested_early_exit_) {
     LOG(INFO)     << "Test interrupted.";
     return;

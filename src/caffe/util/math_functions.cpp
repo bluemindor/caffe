@@ -9,6 +9,22 @@
 
 namespace caffe {
 
+// CAFFE summary: Cauculate histgram in CPU
+template <typename Dtype>
+void caffe_cpu_hist(const Dtype *ptr, int *hist, const int N, const int bin_range, const int scale) {
+  int val = 0;
+  int bin = 0;
+  for (int i = 0; i < N; i++) {
+    val = floor(ptr[i] * scale);
+    bin = val < -bin_range ? 0 : val + bin_range + 1;
+    bin = bin > (2 * bin_range + 1) ? 2 * bin_range + 2 : bin;
+    hist[bin]++;
+  }
+}
+
+template void caffe_cpu_hist<float>(const float*, int* , const int, const int, const int);
+template void caffe_cpu_hist<double>(const double*, int* , const int, const int, const int);
+
 template<>
 void caffe_cpu_gemm<float>(const CBLAS_TRANSPOSE TransA,
     const CBLAS_TRANSPOSE TransB, const int M, const int N, const int K,
@@ -194,6 +210,16 @@ void caffe_sqr<float>(const int n, const float* a, float* y) {
 template <>
 void caffe_sqr<double>(const int n, const double* a, double* y) {
   vdSqr(n, a, y);
+}
+
+template <>
+void caffe_sqrt<float>(const int n, const float* a, float* y) {
+  vsSqrt(n, a, y);
+}
+
+template <>
+void caffe_sqrt<double>(const int n, const double* a, double* y) {
+  vdSqrt(n, a, y);
 }
 
 template <>

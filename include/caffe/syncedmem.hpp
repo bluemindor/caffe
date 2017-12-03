@@ -63,14 +63,8 @@ inline void CaffeFreeHost(void* ptr, bool use_cuda, int alloc_device) {
  */
 class SyncedMemory {
  public:
-  SyncedMemory()
-      : cpu_ptr_(NULL), gpu_ptr_(NULL), size_(0), head_(UNINITIALIZED),
-        own_cpu_data_(false), cpu_malloc_use_cuda_(false), own_gpu_data_(false),
-        gpu_device_(-1), alloc_device_(-1) {}
-  explicit SyncedMemory(size_t size)
-      : cpu_ptr_(NULL), gpu_ptr_(NULL), size_(size), head_(UNINITIALIZED),
-        own_cpu_data_(false), cpu_malloc_use_cuda_(false), own_gpu_data_(false),
-        gpu_device_(-1), alloc_device_(-1) {}
+  SyncedMemory();
+  explicit SyncedMemory(size_t size);
   ~SyncedMemory();
   const void* cpu_data();
   void set_cpu_data(void* data);
@@ -100,7 +94,6 @@ class SyncedMemory {
   bool own_gpu_data_;
   int device_;
 
-  int gpu_device_;
   // device used when cpu_ptr_ is allocated
   int  alloc_device_;
   DISABLE_COPY_AND_ASSIGN(SyncedMemory);
