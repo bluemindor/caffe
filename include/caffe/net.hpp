@@ -177,6 +177,12 @@ class Net {
   inline const vector<Blob<Dtype>*>& learnable_params() const {
     return learnable_params_;
   }
+  inline const vector<int> learnable_params_id_vecs(int layer_id) const {
+    return learnable_params_id_vecs_[layer_id];
+  }
+  inline int learnable_params_id_vecs() const {
+    return learnable_params_id_vecs_.size();
+  }
   /// @brief returns the learnable parameter learning rate multipliers
   inline const vector<float>& params_lr() const { return params_lr_; }
   inline const vector<bool>& has_params_lr() const { return has_params_lr_; }
@@ -251,6 +257,7 @@ class Net {
   void add_after_backward(Callback* value) {
     after_backward_.push_back(value);
   }
+  void MapLayerLearnableParams();
 
  protected:
   // Helpers for Init.
@@ -300,6 +307,7 @@ class Net {
   /// indexed by blob_id.
   vector<Dtype> blob_loss_weights_;
   vector<vector<int> > param_id_vecs_;
+  vector<vector<int> > learnable_params_id_vecs_;
   vector<int> param_owners_;
   vector<string> param_display_names_;
   vector<pair<int, int> > param_layer_indices_;

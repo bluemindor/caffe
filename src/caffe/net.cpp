@@ -67,6 +67,10 @@ void Net<Dtype>::Init(const NetParameter& in_param) {
   top_id_vecs_.resize(param.layer_size());
   bottom_need_backward_.resize(param.layer_size());
   for (int layer_id = 0; layer_id < param.layer_size(); ++layer_id) {
+    // For non-root solvers, whether this layer is shared from root_net_.
+    bool share_from_root = !Caffe::root_solver()
+        && root_net_ != NULL
+        && root_net_->layers_[layer_id]->ShareInParallel();
     // Inherit phase from net if unset.
     if (!param.layer(layer_id).has_phase()) {
       param.mutable_layer(layer_id)->set_phase(phase_);
@@ -974,6 +978,17 @@ const shared_ptr<Layer<Dtype> > Net<Dtype>::layer_by_name(
     LOG(WARNING) << "Unknown layer name " << layer_name;
   }
   return layer_ptr;
+}
+
+template <typename Dtype>
+void Net<Dtype>:: MapLayerLearnableParams() {
+  for (int layer_id = 0; layer_id < param_id_vecs_.size(); ++layer_id){
+    vector<int> lp_id_vecs;
+    for (int i = 0; i < param_id_vecs_[layer_id].size(); ++i){
+      lp_id_vecs.push_back(learnable_param_ids_[param_id_vecs_[layer_id][i]]);
+    }
+    learnable_params_id_vecs_.push_back(lp_id_vecs);
+  }
 }
 
 INSTANTIATE_CLASS(Net);

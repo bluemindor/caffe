@@ -13,11 +13,15 @@ void BasePrefetchingDataLayer<Dtype>::Forward_gpu(
   prefetch_current_ = prefetch_full_.pop("Waiting for data");
   // Reshape to loaded data.
   top[0]->ReshapeLike(prefetch_current_->data_);
-  top[0]->set_gpu_data(prefetch_current_->data_.mutable_gpu_data());
+  caffe_copy(prefetch_current_->data_.count(),
+	     prefetch_current_->data_.gpu_data(),
+	     top[0]->mutable_gpu_data());
   if (this->output_labels_) {
     // Reshape to loaded labels.
     top[1]->ReshapeLike(prefetch_current_->label_);
-    top[1]->set_gpu_data(prefetch_current_->label_.mutable_gpu_data());
+    caffe_copy(prefetch_current_->label_.count(),
+	       prefetch_current_->label_.gpu_data(),
+	       top[1]->mutable_gpu_data());
   }
 }
 

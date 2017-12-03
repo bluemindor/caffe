@@ -26,6 +26,10 @@ using caffe::Timer;
 using caffe::vector;
 using std::ostringstream;
 
+DEFINE_bool(bvlc, false,
+    "Optional; if running in the original BVLC/Caffe mode.");
+DEFINE_int32(threshold, 2000000,
+    "Optional; threshold from which openmp should be applied.");
 DEFINE_string(gpu, "",
     "Optional; run in GPU mode on given device IDs separated by ','."
     "Use '-gpu all' to run on all available GPUs. The effective training "
@@ -248,8 +252,14 @@ int train() {
   LOG(INFO) << "Starting Optimization";
   if (gpus.size() > 1) {
 #ifdef USE_NCCL
-    caffe::NCCL<float> nccl(solver);
-    nccl.Run(gpus, FLAGS_snapshot.size() > 0 ? FLAGS_snapshot.c_str() : NULL);
+    if (FLAGS_bvlc) {
+      caffe::NCCL<float> nccl(solver);
+      nccl.Run(gpus, FLAGS_snapshot.size() > 0 ? FLAGS_snapshot.c_str() : NULL);
+    } else {
+      caffe::CGDP<float> cgdp(solver);
+      cgdp.set_threshold(FLAGS_threshold);
+      cgdp.Run(gpus, FLAGS_snapshot.size() > 0 ? FLAGS_snapshot.c_str() : NULL);
+    }
 #else
     LOG(FATAL) << "Multi-GPU execution not available - rebuild with USE_NCCL";
 #endif
